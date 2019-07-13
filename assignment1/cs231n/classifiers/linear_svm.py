@@ -27,19 +27,18 @@ def svm_loss_naive(W, X, y, reg):
     num_classes = W.shape[1]
     num_train = X.shape[0]
     loss = 0.0
-    for i in range(num_train):
-        scores = X[i].dot(W)
+    for i in xrange(num_train):
+        scores = X[i,:].dot(W)
         correct_class_score = scores[y[i]]
         n = 0
-        for j in range(num_classes):
-            margin = scores[j] - correct_class_score + 1 # note delta = 1
+        for j in xrange(num_classes):
             if j == y[i]:
                 continue
+            margin = scores[j] - correct_class_score + 1 
             if margin > 0:
                 loss += margin
-                dW[:,j] += X[i]
-                n += 1
-        dW[:,y[i]] -= n*X[i]
+                dW[:,y[i]] -= X[i,:] 
+                dW[:,j] += X[i,:] 
 
     # Right now the loss is a sum over all training examples, but we want it
     # to be an average instead so we divide by num_train.
@@ -83,16 +82,15 @@ def svm_loss_vectorized(W, X, y, reg):
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     
     num_train = X.shape[0]
+    i = np.arange(num_train)
     
-    #margins = X @ W - np.sum(W[:,y].T*X,axis = 1,keepdims = True) + 1
     scores = X @ W
-    margins = scores - scores[np.arange(num_train),y][:,np.newaxis] + 1
-    
-    mask = np.full(margins.shape,1)
-    mask[np.arange(num_train),y] = 0
-    unmask = 1 - mask
+    margins = scores - scores[i,y][:,np.newaxis] + 1
+    hinge = np.maximum(0,margins)
+    hinge[i,y] = 0
                 
-    loss += np.sum(np.maximum(0,margins*mask))
+    #loss += np.sum(np.maximum(0,margins*mask))
+    loss += np.sum(hinge)
     loss /= num_train
     loss += reg*np.sum(W*W)
     
@@ -108,11 +106,23 @@ def svm_loss_vectorized(W, X, y, reg):
     # loss.                                                                     #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-    
-    pos_margins = (margins > 0)
-    pos_sum = np.sum(pos_margins*mask, axis = 1, keepdims = True)
-    dW = (X.T @ (pos_margins*mask - pos_sum*unmask))/num_train + 2*reg*W
 
+    #Derivative of Loss with respect to margin (i x j)
+    dLdm = np.zeros(margins.shape)
+    dLdm[margins > 0] = 1
+
+    #Derivative of margin with respect to scores (i x j)
+    dmds = np.ones(margins.shape)
+    class_sums = -np.sum(dLdm,axis = 1) + 1 #plus one compensates for y[i] column
+    dmds[i,y] = class_sums
+    
+    #Derivative of scores with respect to weights (i x k)
+    dsdW = X
+
+    #Derivative of Loss with respect to weights
+    dLdW = dsdW.T @ (dLdm*dmds)
+    dW = dLdW/num_train + 2*reg*W
+   
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     return loss, dW
