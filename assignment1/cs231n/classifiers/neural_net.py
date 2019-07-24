@@ -90,9 +90,9 @@ class TwoLayerNet(object):
             dropout_mask1[:,dropout_list1] = 0
             dropout_mask2[:,dropout_list2] = 0
 
-        inputs = X @ (W1*dropout_mask1) + b1[np.newaxis,:]
-        h1 = np.maximum(0, inputs)
-        scores = h1 @ (W2*dropout_mask2) + b2[np.newaxis,:]
+        inputs = X @ (W1*dropout_mask1) + b1[np.newaxis,:] #First layer weighted features
+        h1 = np.maximum(0, inputs) #First layer activation function
+        scores = h1 @ (W2*dropout_mask2) + b2[np.newaxis,:] #Second layer weighted features
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -117,11 +117,11 @@ class TwoLayerNet(object):
         sum_score_factors = np.sum(score_factors, axis = 1, keepdims = True)
         softmax = score_factors/sum_score_factors #softmax function for each observation and class
         
-        data_loss = -np.sum(np.log(softmax[i,y]))
-        data_loss /= num_train
-        reg_loss = reg*(np.square(W1)).sum() + reg*(np.square(W2)).sum()
-        reg_loss += reg*(np.square(b1)).sum() + reg*(np.square(b2)).sum()
-        loss = data_loss + reg_loss
+        data_loss = -np.sum(np.log(softmax[i,y])) #log loss of softmax
+        data_loss /= num_train #normalize data loss
+        reg_loss = reg*(np.square(W1)).sum() + reg*(np.square(W2)).sum() #regularization loss from weights
+        reg_loss += reg*(np.square(b1)).sum() + reg*(np.square(b2)).sum() #regularization loss from bias
+        loss = data_loss + reg_loss #total loss
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -137,20 +137,20 @@ class TwoLayerNet(object):
         grads.update({'W1': np.empty(W1.shape),'b1': np.empty(b1.shape),
                       'W2': np.empty(W2.shape),'b2': np.empty(b2.shape)})
         
-        softmax[i,y] -= 1
-        dLds = softmax/num_train
-        grads['W2'] = h1.T @ dLds
-        grads['b2'] = np.sum(dLds,axis=0)
+        softmax[i,y] -= 1 #setup softmax derivative
+        dLds = softmax/num_train #Gradient of loss with respect to scores
+        grads['W2'] = h1.T @ dLds #Gradient of loss with resepect to second layer weights
+        grads['b2'] = np.sum(dLds,axis=0) #Gradient of loss with resepect to second layer biases
         
-        dLdh = dLds @ W2.T
-        dLdi = dLdh*(inputs > 0)
-        grads['W1'] = X.T @ dLdi
-        grads['b1'] = np.sum(dLdi,axis=0)
+        dLdh = dLds @ W2.T  #Gradient of loss with resepect to hidden classes
+        dLdi = dLdh*(inputs > 0) #Gradient of loss with resepect to first layer weighted features
+        grads['W1'] = X.T @ dLdi #Gradient of loss with resepect to first layer weights
+        grads['b1'] = np.sum(dLdi,axis=0) #Gradient of loss with resepect to first layer biases
         
-        grads['W1'] += 2*reg*W1
-        grads['W2'] += 2*reg*W2
-        grads['b1'] += 2*reg*b1
-        grads['b2'] += 2*reg*b2
+        grads['W1'] += 2*reg*W1  #Gradient of regularization function with respect to first layer weights
+        grads['W2'] += 2*reg*W2  #Gradient of regularization function with respect to second layer weights
+        grads['b1'] += 2*reg*b1  #Gradient of regularization function with respect to first layer biases
+        grads['b2'] += 2*reg*b2  #Gradient of regularization function with respect to second layer biases
         
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
