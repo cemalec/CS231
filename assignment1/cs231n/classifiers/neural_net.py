@@ -43,7 +43,7 @@ class TwoLayerNet(object):
         self.params['W2'] = std * np.random.randn(hidden_size, output_size)
         self.params['b2'] = np.zeros(output_size)
 
-    def loss(self, X, y=None, reg=0.0):
+    def loss(self, X, y=None, reg=0.0, dropout = False):
         """
         Compute the loss and gradients for a two layer fully connected neural
         network.
@@ -79,8 +79,20 @@ class TwoLayerNet(object):
         # shape (N, C).                                                             #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        dropout_mask1 = np.ones(W1.shape)
+        dropout_mask2 = np.ones(W2.shape)
+        if dropout == True:
+            p_dropout = 0.95
+            num_hid_classes = W1.shape[1]
+            num_classes = W2.shape[1]
+            dropout_list1 = np.random.choice(range(num_hid_classes),int(np.floor(p_dropout*num_hid_classes)),replace=False)
+            dropout_list2 = np.random.choice(range(num_classes),int(np.floor(p_dropout*num_classes)),replace=False)
+            dropout_mask1[:,dropout_list1] = 0
+            dropout_mask2[:,dropout_list2] = 0
 
-        pass
+        inputs = X @ (W1*dropout_mask1) + b1[np.newaxis,:]
+        h1 = np.maximum(0, inputs)
+        scores = h1 @ (W2*dropout_mask2) + b2[np.newaxis,:]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -97,8 +109,19 @@ class TwoLayerNet(object):
         # classifier loss.                                                          #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        num_train = X.shape[0]
+        i = np.arange(num_train)
+        
+        alt_scores = scores - np.amax(scores, axis = 1, keepdims = True)
+        score_factors = np.exp(alt_scores)
+        sum_score_factors = np.sum(score_factors, axis = 1, keepdims = True)
+        softmax = score_factors/sum_score_factors #softmax function for each observation and class
+        
+        data_loss = -np.sum(np.log(softmax[i,y]))
+        data_loss /= num_train
+        reg_loss = reg*(np.square(W1)).sum() + reg*(np.square(W2)).sum()
+        reg_loss += reg*(np.square(b1)).sum() + reg*(np.square(b2)).sum()
+        loss = data_loss + reg_loss
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -111,8 +134,24 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
-
+        grads.update({'W1': np.empty(W1.shape),'b1': np.empty(b1.shape),
+                      'W2': np.empty(W2.shape),'b2': np.empty(b2.shape)})
+        
+        softmax[i,y] -= 1
+        dLds = softmax/num_train
+        grads['W2'] = h1.T @ dLds
+        grads['b2'] = np.sum(dLds,axis=0)
+        
+        dLdh = dLds @ W2.T
+        dLdi = dLdh*(inputs > 0)
+        grads['W1'] = X.T @ dLdi
+        grads['b1'] = np.sum(dLdi,axis=0)
+        
+        grads['W1'] += 2*reg*W1
+        grads['W2'] += 2*reg*W2
+        grads['b1'] += 2*reg*b1
+        grads['b2'] += 2*reg*b2
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         return loss, grads
@@ -120,7 +159,7 @@ class TwoLayerNet(object):
     def train(self, X, y, X_val, y_val,
               learning_rate=1e-3, learning_rate_decay=0.95,
               reg=5e-6, num_iters=100,
-              batch_size=200, verbose=False):
+              batch_size=200, verbose=False,dropout=False):
         """
         Train this neural network using stochastic gradient descent.
 
@@ -155,13 +194,16 @@ class TwoLayerNet(object):
             # them in X_batch and y_batch respectively.                             #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-            pass
+            if batch_size > num_train:
+                batch_size = num_train
+            batch_inds = np.random.choice(range(batch_size),batch_size)
+            X_batch = X[batch_inds]
+            y_batch = y[batch_inds]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             # Compute loss and gradients using the current minibatch
-            loss, grads = self.loss(X_batch, y=y_batch, reg=reg)
+            loss, grads = self.loss(X_batch, y=y_batch, reg=reg,dropout=dropout)
             loss_history.append(loss)
 
             #########################################################################
@@ -172,8 +214,9 @@ class TwoLayerNet(object):
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-            pass
-
+            self.params['W1'] -= learning_rate*grads['W1']
+            self.params['W2'] -= learning_rate*grads['W2']
+            
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             if verbose and it % 100 == 0:
@@ -217,8 +260,11 @@ class TwoLayerNet(object):
         # TODO: Implement this function; it should be VERY simple!                #
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        
+        inputs = X @ self.params['W1']
+        h1 = np.maximum(0, inputs)
+        scores = h1 @ self.params['W2']
+        y_pred = np.argmax(scores,axis = 1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
