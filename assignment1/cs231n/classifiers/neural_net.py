@@ -67,10 +67,13 @@ class TwoLayerNet(object):
           with respect to the loss function; has the same keys as self.params.
         """
         # Unpack variables from the params dictionary
-        W1, b1 = self.params['W1'], self.params['b1']
-        W2, b2 = self.params['W2'], self.params['b2']
+        W1 = self.params['W1']
+        b1 = self.params['b1']
+        W2 = self.params['W2']
+        b2 = self.params['b2']
         N, D = X.shape
-
+        H, C = W2.shape
+        
         # Compute the forward pass
         scores = None
         #############################################################################
@@ -79,20 +82,16 @@ class TwoLayerNet(object):
         # shape (N, C).                                                             #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-        dropout_mask1 = np.ones(W1.shape)
-        dropout_mask2 = np.ones(W2.shape)
+        
+        inputs = X.dot(W1) + b1
         if dropout == True:
-            p_dropout = 0.95
-            num_hid_classes = W1.shape[1]
-            num_classes = W2.shape[1]
-            dropout_list1 = np.random.choice(range(num_hid_classes),int(np.floor(p_dropout*num_hid_classes)),replace=False)
-            dropout_list2 = np.random.choice(range(num_classes),int(np.floor(p_dropout*num_classes)),replace=False)
-            dropout_mask1[:,dropout_list1] = 0
-            dropout_mask2[:,dropout_list2] = 0
-
-        inputs = X @ (W1*dropout_mask1) + b1[np.newaxis,:] #First layer weighted features
-        h1 = np.maximum(0, inputs) #First layer activation function
-        scores = h1 @ (W2*dropout_mask2) + b2[np.newaxis,:] #Second layer weighted features
+            for i in range(X.shape[0]):
+                dropout_list = np.random.choice(range(H),
+                                                int(np.floor(0.5*H)),
+                                                replace=False)
+                inputs[i,dropout_list] = 0
+        h1 = np.maximum(0, inputs)
+        scores = h1.dot(W2) + b2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -112,16 +111,16 @@ class TwoLayerNet(object):
         num_train = X.shape[0]
         i = np.arange(num_train)
         
-        alt_scores = scores - np.amax(scores, axis = 1, keepdims = True)
-        score_factors = np.exp(alt_scores)
+        scores -= np.amax(scores, axis = 1, keepdims = True)
+        score_factors = np.exp(scores)
         sum_score_factors = np.sum(score_factors, axis = 1, keepdims = True)
         softmax = score_factors/sum_score_factors #softmax function for each observation and class
         
-        data_loss = -np.sum(np.log(softmax[i,y])) #log loss of softmax
-        data_loss /= num_train #normalize data loss
-        reg_loss = reg*(np.square(W1)).sum() + reg*(np.square(W2)).sum() #regularization loss from weights
-        reg_loss += reg*(np.square(b1)).sum() + reg*(np.square(b2)).sum() #regularization loss from bias
-        loss = data_loss + reg_loss #total loss
+        data_loss = -np.sum(np.log(softmax[i,y]))
+        data_loss /= num_train
+        reg_loss = reg*(np.square(W1)).sum() + reg*(np.square(W2)).sum()
+        reg_loss += reg*(np.square(b1)).sum() + reg*(np.square(b2)).sum()
+        loss = data_loss + reg_loss
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -137,21 +136,21 @@ class TwoLayerNet(object):
         grads.update({'W1': np.empty(W1.shape),'b1': np.empty(b1.shape),
                       'W2': np.empty(W2.shape),'b2': np.empty(b2.shape)})
         
-        softmax[i,y] -= 1 #setup softmax derivative
-        dLds = softmax/num_train #Gradient of loss with respect to scores
-        grads['W2'] = h1.T @ dLds #Gradient of loss with resepect to second layer weights
-        grads['b2'] = np.sum(dLds,axis=0) #Gradient of loss with resepect to second layer biases
+        softmax[i,y] -= 1
+        dLds = softmax/num_train
+        grads['W2'] = h1.T @ dLds
+        grads['b2'] = np.sum(dLds,axis=0)
         
-        dLdh = dLds @ W2.T  #Gradient of loss with resepect to hidden classes
-        dLdi = dLdh*(inputs > 0) #Gradient of loss with resepect to first layer weighted features
-        grads['W1'] = X.T @ dLdi #Gradient of loss with resepect to first layer weights
-        grads['b1'] = np.sum(dLdi,axis=0) #Gradient of loss with resepect to first layer biases
+        dLdh = dLds @ W2.T
+        dLdi = dLdh*(inputs >= 0)
+        grads['W1'] = X.T @ dLdi
+        grads['b1'] = np.sum(dLdi,axis=0)
         
-        grads['W1'] += 2*reg*W1  #Gradient of regularization function with respect to first layer weights
-        grads['W2'] += 2*reg*W2  #Gradient of regularization function with respect to second layer weights
-        grads['b1'] += 2*reg*b1  #Gradient of regularization function with respect to first layer biases
-        grads['b2'] += 2*reg*b2  #Gradient of regularization function with respect to second layer biases
-        
+        grads['W1'] += 2*reg*W1
+        grads['W2'] += 2*reg*W2
+        grads['b1'] += 2*reg*b1
+        grads['b2'] += 2*reg*b2
+
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         return loss, grads
@@ -177,6 +176,13 @@ class TwoLayerNet(object):
         - batch_size: Number of training examples to use per step.
         - verbose: boolean; if true print progress during optimization.
         """
+        self.params['learning_rate'] = learning_rate
+        self.params['learning_rate_decay'] = learning_rate_decay
+        self.params['reg'] = reg
+        self.params['num_iters'] = num_iters
+        self.params['batch_size'] = batch_size
+        self.params['dropout'] = dropout
+        
         num_train = X.shape[0]
         iterations_per_epoch = max(num_train / batch_size, 1)
 
@@ -196,13 +202,14 @@ class TwoLayerNet(object):
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
             if batch_size > num_train:
                 batch_size = num_train
-            batch_inds = np.random.choice(range(batch_size),batch_size)
+            batch_inds = np.random.choice(range(num_train),batch_size,replace = False)
             X_batch = X[batch_inds]
             y_batch = y[batch_inds]
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
             # Compute loss and gradients using the current minibatch
+            
             loss, grads = self.loss(X_batch, y=y_batch, reg=reg,dropout=dropout)
             loss_history.append(loss)
 
@@ -213,9 +220,10 @@ class TwoLayerNet(object):
             # stored in the grads dictionary defined above.                         #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
             self.params['W1'] -= learning_rate*grads['W1']
             self.params['W2'] -= learning_rate*grads['W2']
+            self.params['b1'] -= learning_rate*grads['b1']
+            self.params['b2'] -= learning_rate*grads['b2']
             
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -225,8 +233,8 @@ class TwoLayerNet(object):
             # Every epoch, check train and val accuracy and decay learning rate.
             if it % iterations_per_epoch == 0:
                 # Check accuracy
-                train_acc = (self.predict(X_batch) == y_batch).mean()
-                val_acc = (self.predict(X_val) == y_val).mean()
+                train_acc = (self.predict(X_batch,dropout=dropout) == y_batch).mean()
+                val_acc = (self.predict(X_val,dropout=dropout) == y_val).mean()
                 train_acc_history.append(train_acc)
                 val_acc_history.append(val_acc)
 
@@ -239,7 +247,7 @@ class TwoLayerNet(object):
           'val_acc_history': val_acc_history,
         }
 
-    def predict(self, X):
+    def predict(self, X, dropout=False):
         """
         Use the trained weights of this two-layer network to predict labels for
         data points. For each data point we predict scores for each of the C
@@ -261,9 +269,11 @@ class TwoLayerNet(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         
-        inputs = X @ self.params['W1']
+        inputs = X.dot(self.params['W1']) + self.params['b1']
+        if dropout == True:
+            inputs *= 0.5
         h1 = np.maximum(0, inputs)
-        scores = h1 @ self.params['W2']
+        scores = h1.dot(self.params['W2']) + self.params['b2']
         y_pred = np.argmax(scores,axis = 1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
